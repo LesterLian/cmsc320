@@ -1,0 +1,12 @@
+---
+title: "Final Project"
+author: "Zizhen Lian"
+date: "5/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+# library(caret)
+```
