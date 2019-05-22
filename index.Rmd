@@ -1,8 +1,10 @@
 ---
-title: "Final Project"
+title: "Learning Data Science Pipeline with the Titanic"
 author: "Zizhen Lian"
 date: "5/10/2019"
-output: html_document
+output: 
+  html_document: 
+    df_print: "kable"
 ---
 
 ```{r setup, include=FALSE, echo=FALSE}
@@ -10,3 +12,63 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 # library(caret)
 ```
+
+### Introduction
+
+This tutorial aims to go through the data analysis pipeline from data preparation to Machine Learning using data from the Titanic shipwreck. I choose to use this dataset because 1) that most people have heard about it and have watched the great romantic movie telling the story of it, therefore I hope this topic can arouse people's interest; and 2) this is a competition in Kaggle.com which provides a good platform and other very intuitive tutorial using the same dataset.
+
+With this dataset, I will try to answer the question "Can we predict if a person on the Titanic would survive given the data?" 
+
+### Data
+
+The Kaggle competition can be found [here](https://www.kaggle.com/c/titanic/).
+
+The dataset can be downloaded [here](https://www.kaggle.com/c/titanic/download/train.csv).
+
+```{r load}
+csv_file = 'data/train.csv'
+# tidy_data <- read.csv(csv_file)
+tidy_data <- read_csv(csv_file)
+head(tidy_data)
+```
+
+
+### Exploratory Analysis
+
+Now, let's have a general look at the data and some of its statistical properties. This will help us decide what would be the proper model and proper transmormation for the data.
+
+```{r Exploratory Analysis}
+summary(tidy_data)
+```
+
+From this summary, we find that _Name_, _Sex_, _Ticket_, _Cabin_ and _Embarked_ contains strings and other variables contains numbers. For those string variables, we may need to parse them and then use them as categorical variables, which are the variables describe if an observed object belong to a category. We will anaylyse them latter.
+
+For those numerical variables, we need to decide if they are actually categorical variables, or real numerical variables, which the magnitude of the number matters.
+
+_Survived_ is the outcome we want to predict. It is a categorical variable with 1 represents survived and 0 otherwise.
+
+_PassengerId_ is an ID number assigned for this dataset, which has no meaning and propably no use in our prediction.
+
+_Pclass_ is a number representing the passenger class, which should be a categorical variable.
+
+_SibSp_ and _Parch_ represent the number of siblings and spouses, and number of parents and children respectively, which the number has useful meaning. Also for _Age_ and _Fare_, these variables are intuitively numerical.
+
+```{r}
+cat_variables = tidy_data %>%
+  select(Name, Sex, Ticket, Cabin, Embarked)
+distinct_value = sapply(cat_variables, n_distinct)
+na_number = sapply(cat_variables, function(x) sum(is.na(x)))
+data.frame(distinct=distinct_value, NAs=na_number)
+```
+
+ _Sex_ is well formed categorical variable with value "female" and "male".
+ 
+ _Embarked_ is also well formed. It represents the port of embarkation.(C for Cherbourg, Q for Queenstown and S for Southampton)
+ 
+ _Name_ and _Ticket_ have too many distinct values. They are not intuitively related to our question. We'll probably not use them unless we find a proper way to categorize them.
+ 
+_Cabin_ should be useful because it's related to where the cabins are. However, there are 687/891 missing values. Therefore, we have to try to guess the cabin numbers, or at least the letter representing the class of cabin.
+
+### Hypothesis Testing
+
+### ML
