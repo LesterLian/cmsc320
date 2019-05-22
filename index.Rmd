@@ -5,6 +5,8 @@ date: "5/10/2019"
 output: 
   html_document: 
     df_print: "kable"
+    toc: true
+    toc_float: true
 ---
 <style type="text/css">
 body{font-size: 16px;}
