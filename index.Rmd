@@ -6,9 +6,6 @@ output:
   html_document: 
     df_print: "kable"
 ---
-<style type="text/css">
-body{font-size: 16px;}
-</style>
 
 ```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
