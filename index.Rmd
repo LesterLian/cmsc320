@@ -10,14 +10,15 @@ output:
 ```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-# library(caret)
+library(broom)
+library(caret)
 ```
 
 ### Introduction
 
 This tutorial aims to go through the data analysis pipeline from data preparation to Machine Learning using data from the Titanic shipwreck. I choose to use this dataset because 1) that most people have heard about it and have watched the great romantic movie telling the story of it, therefore I hope this topic can arouse people's interest; and 2) this is a competition in Kaggle.com which provides a good platform and other very intuitive tutorial using the same dataset.
 
-With this dataset, I will try to answer the question "Can we predict if a person on the Titanic would survive given the data?" 
+With this dataset, I will try to answer the question "Can we predict the survival of a passenger on Titanic given the data?" 
 
 ### Data
 
@@ -53,6 +54,35 @@ _Pclass_ is a number representing the passenger class, which should be a categor
 
 _SibSp_ and _Parch_ represent the number of siblings and spouses, and number of parents and children respectively, which the number has useful meaning. Also for _Age_ and _Fare_, these variables are intuitively numerical.
 
+Now, let's look at the distribution for the numerical variables.
+
+```{r}
+Age_median = median(tidy_data$Age, na.rm = TRUE)
+SibSp_median = median(tidy_data$SibSp)
+Parch_median = median(tidy_data$Parch)
+Fare_median = median(tidy_data$Fare)
+
+p1 = tidy_data %>%
+  ggplot(aes(x=Age)) +
+  geom_histogram(binwidth = 5) +
+  geom_vline(xintercept = Age_median, colour = "red")
+p2 = tidy_data %>%
+  ggplot(aes(x=SibSp)) +
+  geom_histogram(binwidth = 1) +
+  geom_vline(xintercept = SibSp_median, colour = "red")
+p3 = tidy_data %>%
+  ggplot(aes(x=Parch)) +
+  geom_histogram(binwidth = 1) +
+  geom_vline(xintercept = Parch_median, colour = "red")
+p4 = tidy_data %>%
+  ggplot(aes(x=Fare)) +
+  geom_histogram(binwidth = 5) +
+  geom_vline(xintercept = Fare_median, colour = "red")
+gridExtra::grid.arrange(p1,p2,p3,p4,nrow = 2)
+```
+
+The distribution of a variable with random error will have a bell-shape distribution graph. The distribution of _Age_ seems good on the higher side but not so normal on the lower side, but generally fine. Also, we notice that there are 177 missing values in _Age_, since the distribution of _Age_ is fine, we may try to replace those missing value with the average value. The distribution of the other three variables seem distribute more densely near 0, therefore we may consider a log transformation on them.
+
 ```{r}
 cat_variables = tidy_data %>%
   select(Name, Sex, Ticket, Cabin, Embarked)
@@ -69,6 +99,122 @@ data.frame(distinct=distinct_value, NAs=na_number)
  
 _Cabin_ should be useful because it's related to where the cabins are. However, there are 687/891 missing values. Therefore, we have to try to guess the cabin numbers, or at least the letter representing the class of cabin.
 
+Therefore, we will make the following changes to our data:
+
+* Replace missing value with average value in _Age_
+
+* Log transformation on _SibSp_, _Parch_ and _Fare_
+
+* Feeding the categorical variables to _factor()_ so the program knows it's a categorical variable.
+
+* Guessing the letter part of missing _Cabin_ values.
+
+```{r}
+Age_mean = mean(tidy_data$Age, na.rm = TRUE)
+final_data = tidy_data %>%
+  select(-PassengerId, -Name, -Ticket) %>%
+  mutate(Age=replace_na(Age,Age_mean), 
+         SibSp=log(SibSp+1), Parch=log(Parch+1), Fare=log(Fare+1), 
+         Survived=factor(Survived), Pclass=factor(Pclass), Sex=factor(Sex), Embarked=factor(Embarked), Cabin=ifelse(is.na(Cabin),NA,substr(Cabin,1,1)))
+```
+
+This code does the first three jobs. Each value is added by 1 before log transformation because there are zero values in the three variables.
+
+```{r}
+p5 = final_data %>%
+  ggplot(aes(x=Cabin, y=Fare)) +
+  geom_boxplot()
+p6 = final_data %>%
+  ggplot(aes(x=Cabin)) +
+  geom_histogram(stat="count") +
+  facet_wrap( ~ Pclass, nrow = 1)
+  
+gridExtra::grid.arrange(p5,p6,nrow = 1)
+```
+
+The most intuitive way to guess a cabin value is by "calculate" it from the class of the passenger and the fare of ticket. However, the box plot above shows that there's no clear distiction between fares for cabin B to E; the histogram above shows that the cabin has a wide spread for each class. Therefore, we can't guess the cabin value based on only these two variables. We shouldn't try to predict the cabin value because it will add extra error and is not good for our prediction of survival. We will remove _Cabin_ from our dataset.
+
+```{r}
+final_data = final_data %>%
+  select(-Cabin) %>%
+  drop_na()
+set.seed(1234)
+train_ind <- sample(seq_len(nrow(final_data)), size = 100)
+
+test_data <- final_data[train_ind, ]
+final_data <- final_data[-train_ind, ]
+```
+
 ### Hypothesis Testing
 
+In this section, we will try to answer the question "Can we predict the survival of a passenger on Titanic given the data?" with Logistic Regression and Machine Learning.
+
+We build our Logistic Regression as:
+
+$$odds(Survived)=log\frac{p(Survived)}{1-p(Survived)}=\beta_0+\beta_1Pclass+\beta_2Sex+\beta_3Age+\beta_4SibSp+\beta_5Parch+\beta_6Fare+\beta_7Embarked$$
+
+We make a hypthesis "Yes, these variables are enough to predict survival." In other words, "At least some of the $\beta$s will have statistically significant effect on survival".
+
+```{r logistic}
+fit = glm(Survived ~ ., data=final_data, family=binomial)
+tidy(fit)
+```
+
+We can see that _Pclass_, _Sex_, _Age_, _SibSp_ has p-value smaller than 5%, which means we are 95% confident that these variable make significant effect on odds of survival. However, this doesn't mean our hypothesis holds. We should first conduct a ovarall test on all of our variables.
+
+```{r}
+pchisq(fit$null.deviance-fit$deviance, fit$df.null-fit$df.residual, lower.tail = FALSE)
+```
+
+The overall test also gives a very small p-value, which means we can be very confidence that our model predict the odds of survival better than just taking the mojority value.
+
+Next, we test if removing the insignificant variables would make our model better.
+
+```{r}
+fit_remove_embarked = glm(Survived ~ .-Parch-Embarked, data=final_data, family=binomial)
+anova(fit_remove_embarked, fit, test = 'LRT')
+```
+
+This test gives a very large p-value greater than 5%, therefore we are confident that the model with _Embarked_ and _Parch_ is no better than the one without it.
+
+```{r}
+tidy(fit_remove_embarked)
+```
+
+The p-value of _Fare_ is still greater than 5%, but since it's close, I will leave it there.
+
 ### ML
+
+If after doing all these, you feel that you are not comfortable with the tests you cannot fully understand and the choices I made for no specific reason, that's totally normal. I don't like all the choices I made either. The traditional data analysis requires a lot human judgement. The good news is: We can use some other methods which requires less human inputs. They are called Machine Learning.
+
+For demonstration, let's see a model which is very different than the regression model, named Random Forest.
+
+```{r}
+final_data = final_data %>%
+  mutate(Survived=ifelse(Survived==1,'Yes', 'No'))
+fit_control <- trainControl(
+  classProbs=TRUE)
+rf_fit <- train(Survived~.-Sex-Pclass-Embarked,
+                  data=final_data,
+                  method = "rf",
+                  ntree = 10,
+                  trControl = fit_control
+                )
+```
+
+The only human input here is the parameter _ntree_, which represents number of trees in each iteration of Random Forest.
+
+Let's make prediction with the two models and compare there accuracy.
+
+```{r}
+rf_predict = ifelse(predict(rf_fit, test_data) == "Yes", 1, 0)
+regression_predict = ifelse(predict(fit_remove_embarked, test_data) > 1, 1, 0)
+data.frame(Random_Forest=sum(rf_predict==test_data$Survived), 
+           Regression=sum(regression_predict==test_data$Survived))
+```
+
+The Logistic Regression model has higher accuracy, but Random Forest is not that far off.
+
+### Conclusion
+
+What do we learn after doing all these? First of all, we can confidently answer our original question with "Yes, we can predict the survival of a passenger with at least 70% accuracy using the data". Secondly, we see how several lines of codes can make a Machine Learning model with close performance than a Regression model we get from careful analysis.
